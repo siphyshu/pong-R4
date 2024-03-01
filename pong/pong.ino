@@ -10,11 +10,11 @@ const int paddleSize = 3;
 const int debugPin = D13;
 // the axis of the joystick is flipped, meaning that the original x-axis is y and the original y-axis is x
 // the reason: to align with the way it'll be most comfortable for the player to hold the joystick (wires going upwards, away from body)
-const int joystick1XPin = 1;  // Analog pin for X-axis of the joystick #1 (left)
-const int joystick1YPin = 0;  // Analog pin for Y-axis of the joystick #1 (left)
+const int joystick1XPin = A1;  // Analog pin for X-axis of the joystick #1 (left)
+const int joystick1YPin = A0;  // Analog pin for Y-axis of the joystick #1 (left)
 const int joystick1SwPin = D12;  // Digital pin for Switch of the joystick #1 (left)
-const int joystick2XPin = 3;  // Analog pin for X-axis of the joystick #2 (right)
-const int joystick2YPin = 2;  // Analog pin for Y-axis of the joystick #2 (right)
+const int joystick2XPin = A3;  // Analog pin for X-axis of the joystick #2 (right)
+const int joystick2YPin = A2;  // Analog pin for Y-axis of the joystick #2 (right)
 const int joystick2SwPin = D11;  // Digital pin for Switch of the joystick #2 (right)
 const int joystickDeadzone = 30;  // Defines the deadzone area around the joystick's idle position to account for potentiometer inaccuracies.
                                   // Increase this if there are unintentional direction changes in one or two specific directions.
@@ -27,6 +27,8 @@ bool sw2State, sw2Prev;
 int x1Value, y1Value, x1Map, y1Map, x1Prev, y1Prev;
 int x2Value, y2Value, x2Map, y2Map, x2Prev, y2Prev;
 int paddle1Direction, paddle2Direction;
+int paddleSpeed = 2;
+int ballSpeed = 1;
 String paddle1DirectionStr, paddle2DirectionStr;
 
 
@@ -40,6 +42,15 @@ byte grid[matrixSizeY][matrixSizeX] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 };
+
+struct Point {
+  int x;
+  int y;
+};
+
+Point paddle1[paddleSize];
+Point paddle2[paddleSize];
+Point ball;
 
 void setup() {
   // put your setup code here, to run once:
@@ -56,22 +67,50 @@ void setup() {
   pinMode(joystick1SwPin, INPUT_PULLUP);
   pinMode(joystick2SwPin, INPUT_PULLUP);
   pinMode(debugPin, INPUT_PULLUP);
+
+  initializeGame();
 }
 
 void loop() {
   // Handle joysticks inputs
   handleJoystick();
 
-  // movePaddles();
+  movePaddles();
 
   // moveBall();
 
   // checkCollisions();
 
-  // updateMatrix();
+  updateMatrix();
 
-  delay(170);
+  delay(100);
 }
+
+
+void initializeGame() {
+  resetGrid();
+
+  Point paddle1Start = {0, 0};
+  Point paddle2Start = {11, 0};
+
+  for (int i = 0; i < paddleSize; i++) {
+    paddle1[i].x = paddle1Start.x;
+    paddle1[i].y = paddle1Start.y + i;
+    paddle2[i].x = paddle2Start.x;
+    paddle2[i].y = paddle2Start.y + i;
+  }
+
+  ball.x = 5;
+  ball.y = 3;
+
+  for (int i = 0; i < paddleSize; i++) {
+    grid[paddle1[i].y][paddle1[i].x] = 1;
+    grid[paddle2[i].y][paddle2[i].x] = 1;
+  }
+
+  matrix.renderBitmap(grid, matrixSizeX, matrixSizeY);
+}
+
 
 void handleJoystick() {
   x1Value = analogRead(joystick1XPin);
@@ -111,10 +150,59 @@ void handleJoystick() {
   Serial.println();
 }
 
+
+void movePaddles() {
+  // Move Paddle 1
+  if (paddle1Direction == 2) {
+    movePaddle(paddle1, 1);  // Move up
+  } else if (paddle1Direction == 4) {
+    movePaddle(paddle1, -1);  // Move down
+  }
+
+  // Move Paddle 2
+  if (paddle2Direction == 2) {
+    movePaddle(paddle2, 1);  // Move up
+  } else if (paddle2Direction == 4) {
+    movePaddle(paddle2, -1);  // Move down
+  }
+}
+
+
+void movePaddle(Point paddle[], int direction) {
+  // Move paddle within bounds
+  paddle[0].y = constrain(paddle[0].y - direction * paddleSpeed, 0, matrixSizeY - paddleSize);
+  for (int i=1; i<paddleSize; i++) {
+    paddle[i].y = paddle[i-1].y+1;
+  }
+}
+
+
 void print(boolean debugState) {
   if (debugState) {
     Serial.println("Joystick 1: (" + String(x1Map) + ", " + String(y1Map) + "), Button: " + String(sw1State));
     Serial.println("Joystick 2: (" + String(x2Map) + ", " + String(y2Map) + "), Button: " + String(sw2State));
     Serial.println();
   }
+}
+
+
+void resetGrid() {
+  for (int y = 0; y < matrixSizeY; y++) {
+    for (int x = 0; x < matrixSizeX; x++) {
+      grid[y][x] = 0;
+    }
+  }
+}
+
+
+void updateMatrix() {
+  resetGrid();
+
+  for (int i = 0; i < paddleSize; i++) {
+    grid[paddle1[i].y][paddle1[i].x] = 1;
+    grid[paddle2[i].y][paddle2[i].x] = 1;
+  }
+
+  grid[ball.y][ball.x] = 1;
+  matrix.renderBitmap(grid, matrixSizeY, matrixSizeX);
 }
