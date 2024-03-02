@@ -26,9 +26,9 @@ bool sw1State, sw1Prev;
 bool sw2State, sw2Prev;
 int x1Value, y1Value, x1Map, y1Map, x1Prev, y1Prev;
 int x2Value, y2Value, x2Map, y2Map, x2Prev, y2Prev;
-int paddle1Direction, paddle2Direction;
+int paddle1Direction, paddle2Direction, paddle1DirectionPrev, paddle2DirectionPrev;
 int paddleSpeed = 2;
-int ballSpeed = 1;
+int ballSpeedX = 1, ballSpeedY = 1;
 String paddle1DirectionStr, paddle2DirectionStr;
 
 
@@ -72,16 +72,20 @@ void setup() {
 }
 
 void loop() {
-  // Handle joysticks inputs
   handleJoystick();
+  
+  if (isGameOver) {
+    resetGrid();
+  }
+  else {
+    movePaddles();
 
-  movePaddles();
+    moveBall();
 
-  // moveBall();
+    // checkCollisions();
 
-  // checkCollisions();
-
-  updateMatrix();
+    updateMatrix();
+  }
 
   delay(100);
 }
@@ -100,7 +104,7 @@ void initializeGame() {
     paddle2[i].y = paddle2Start.y + i;
   }
 
-  ball.x = 5;
+  ball.x = 2;
   ball.y = 3;
 
   for (int i = 0; i < paddleSize; i++) {
@@ -130,9 +134,11 @@ void handleJoystick() {
   if (!isGameOver) {
     if (y1Map <= 512 && y1Map >= joystickDeadzone) { paddle1Direction = 2, paddle1DirectionStr = "Up"; } // Up
     else if (y1Map >= -512 && y1Map <= -joystickDeadzone) { paddle1Direction = 4, paddle1DirectionStr = "Down"; } // Down
+    else { paddle1Direction = 0, paddle1DirectionStr = "Idle"; }
 
     if (y2Map <= 512 && y2Map >= joystickDeadzone) { paddle2Direction = 2, paddle2DirectionStr = "Up"; } // Up
     else if (y2Map >= -512 && y2Map <= -joystickDeadzone) { paddle2Direction = 4, paddle2DirectionStr = "Down"; } // Down
+    else { paddle2Direction = 0, paddle2DirectionStr = "Idle"; }
   } 
   else {
     if (x1Map <= 512 && x1Map >= joystickDeadzone && y1Map <= 511 && y1Map >= -511) { paddle1Direction = 1, paddle1DirectionStr = "Right"; } // Right 
@@ -157,6 +163,8 @@ void movePaddles() {
     movePaddle(paddle1, 1);  // Move up
   } else if (paddle1Direction == 4) {
     movePaddle(paddle1, -1);  // Move down
+  } else if (paddle1Direction == 0) {
+    movePaddle(paddle1, 0); // Don't move
   }
 
   // Move Paddle 2
@@ -164,6 +172,8 @@ void movePaddles() {
     movePaddle(paddle2, 1);  // Move up
   } else if (paddle2Direction == 4) {
     movePaddle(paddle2, -1);  // Move down
+  } else if (paddle2Direction == 0) {
+    movePaddle(paddle2, 0); // Don't move
   }
 }
 
@@ -173,6 +183,31 @@ void movePaddle(Point paddle[], int direction) {
   paddle[0].y = constrain(paddle[0].y - direction * paddleSpeed, 0, matrixSizeY - paddleSize);
   for (int i=1; i<paddleSize; i++) {
     paddle[i].y = paddle[i-1].y+1;
+  }
+}
+
+
+void moveBall() {
+  // Move the ball
+  ball.x += ballSpeedX;
+  ball.y += ballSpeedY;
+
+  // Check for collisions with the top or bottom walls; in such case, the ball will bounce
+  if (ball.y <= 0 || ball.y >= matrixSizeY - 1) {
+    ballSpeedY = -ballSpeedY;
+  }
+
+  // Check for collisions with paddles; in such case, the ball will bounce
+  if (ball.x == 1 && ball.y >= paddle1[0].y && ball.y <= paddle1[0].y + paddleSize) {
+    ballSpeedX = -ballSpeedX;
+  }
+  if (ball.x == matrixSizeX - 2 && ball.y >= paddle2[0].y && ball.y <= paddle2[0].y + paddleSize) {
+    ballSpeedX = -ballSpeedX;
+  }
+
+  // Check for scoring
+  if (ball.x < 0 || ball.x >= matrixSizeX) {
+    isGameOver = true;
   }
 }
 
