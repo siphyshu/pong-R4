@@ -16,7 +16,7 @@ const int joystick1SwPin = D12;  // Digital pin for Switch of the joystick #1 (l
 const int joystick2XPin = A3;  // Analog pin for X-axis of the joystick #2 (right)
 const int joystick2YPin = A2;  // Analog pin for Y-axis of the joystick #2 (right)
 const int joystick2SwPin = D11;  // Digital pin for Switch of the joystick #2 (right)
-const int joystickDeadzone = 30;  // Defines the deadzone area around the joystick's idle position to account for potentiometer inaccuracies.
+const int joystickDeadzone = 50;  // Defines the deadzone area around the joystick's idle position to account for potentiometer inaccuracies.
                                   // Increase this if there are unintentional direction changes in one or two specific directions.
                                   // Decrease this if joystick feels unresponsive or sluggish when changing directions.
 
@@ -31,7 +31,9 @@ int paddle1Direction, paddle2Direction, paddle1DirectionPrev, paddle2DirectionPr
 int ballSpeed = 1;
 int paddleSpeed = 2;
 int ballSpeedX = ballSpeed, ballSpeedY = ballSpeed;
-int p1Score = 0, p2Score = 0; 
+int p1Points = 0, p2Points = 0; 
+int pointsNeededToWin = 5;
+int randomVariable = 0; // just used to assign it to random() choices
 int winner;
 
 byte grid[matrixSizeY][matrixSizeX] = {
@@ -57,6 +59,7 @@ Point ball;
 // forward declarations
 void printText(String displayText, int scrollDirection, int speed);
 
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
@@ -80,7 +83,10 @@ void setup() {
 void loop() {
   debugState = not digitalRead(debugPin);
   if (debugState) {
+    pointsNeededToWin = 100;
     printDebugInfo();
+  } else {
+    
   }
 
   handleJoystick();
@@ -157,45 +163,77 @@ void moveBall() {
   ball.x += ballSpeedX;
   ball.y += ballSpeedY;
 
+  // Serial.println("ball: (" + String(ball.x) + ", " + String(ball.y) + ")");
+  // Serial.println("[1] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
+
+  bool collidedWithTopOrBottomWall = ball.y <= 0 || ball.y >= matrixSizeY - 1;
+  bool collidedWithRightWall = ball.x < 0;
+  bool collidedWithLeftWall = ball.x >= matrixSizeX;
+  bool collidedWithLeftPaddle = ball.x == 1 && ball.y >= paddle1[0].y && ball.y <= paddle1[0].y + paddleSize;
+  bool collidedWithRightPaddle = ball.x == matrixSizeX - 2 && ball.y >= paddle2[0].y && ball.y <= paddle2[0].y + paddleSize;
+
+  // if (ball.x == paddle1[0])
+
   // Check for collisions with the top or bottom walls; in such case, the ball will bounce
-  if (ball.y <= 0 || ball.y >= matrixSizeY - 1) {
+  if (collidedWithTopOrBottomWall) {
     ballSpeedY = -ballSpeedY;
+    // Serial.println("[2] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
   }
 
-  // Check for collisions with paddles; in such case, the ball will bounce
-  if (ball.x == 1 && ball.y >= paddle1[0].y && ball.y <= paddle1[0].y + paddleSize) {
+  bool isCorner = (ball.x == 1 && ball.y == 0) || (ball.x == 1 && ball.y == 7) || (ball.x == 10 && ball.y == 0) || (ball.x == 10 && ball.y == 7);
+  if (isCorner) {
+      // we do nothing. do NOT change this code. let this be here else bad things happen. idk why.
+    }
+  else if (collidedWithLeftPaddle || collidedWithRightPaddle) {
     ballSpeedX = -ballSpeedX;
-  }
-  if (ball.x == matrixSizeX - 2 && ball.y >= paddle2[0].y && ball.y <= paddle2[0].y + paddleSize) {
-    ballSpeedX = -ballSpeedX;
+    randomVariable = random(1,101);
+
+    if (randomVariable >= 1 && randomVariable <= 40) {
+      ballSpeedY = -ballSpeed;
+    } else if (randomVariable >= 41 && randomVariable <= 80) {
+      ballSpeedY = ballSpeed;
+    } else if (randomVariable >= 81 && randomVariable <= 100) {
+      ballSpeedY = 0;
+    }
+    // Serial.println("[3] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
   }
 
-  // Check for scoring
-  if (ball.x < 0 ) {
-    p2Score += 1;
+  if (collidedWithRightWall) {
+    // Player 2 will score here
+    p2Points += 1;
+    delay(75);
     resetBall(2);
-  } else if (ball.x >= matrixSizeX) {
-    p1Score += 1;
+  } else if (collidedWithLeftWall) {
+    // Player 1 will score here
+    p1Points += 1;
+    delay(75);
     resetBall(1);
-  }
+  };
 
+  // Serial.println("[4] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
+  // Serial.println("---");
 }
 
 
 void resetBall(int playerTurn) {
   // playerTurn: the ball will move towards this player 
   
+  // Set the ball position based on the playerTurn
   if (playerTurn == 1) { 
-    ball.y = 2;
-    ball.x = 8;
-    ballSpeedY = -(ballSpeed);
-    ballSpeedX = -(ballSpeed);
-  } 
-  else if (playerTurn == 2) {
-    ball.y = 2;
-    ball.x = 3;
-    ballSpeedY = -(ballSpeed);
-    ballSpeedX = (ballSpeed);
+    ball.y = random(7);
+    ball.x = 7;
+    ballSpeedX = -ballSpeed;
+  } else if (playerTurn == 2) {
+    ball.y = random(7);
+    ball.x = 4;
+    ballSpeedX = ballSpeed;
+  }
+
+  // Randomly decide the ball speed direction
+  if (random(2) == 0) {
+    ballSpeedY = -ballSpeed;
+  } else {
+    ballSpeedY = ballSpeed;
   }
 }
 
@@ -238,7 +276,7 @@ void printText(String displayText, int scrollDirection = 0, int speed = 35) {
 void updateMatrix() {
   resetGrid();
 
-  // drawing teh paddles
+  // drawing the paddles
   for (int i = 0; i < paddleSize; i++) {
     grid[paddle1[i].y][paddle1[i].x] = 1;
     grid[paddle2[i].y][paddle2[i].x] = 1;
@@ -248,11 +286,11 @@ void updateMatrix() {
   grid[ball.y][ball.x] = 1;
 
   // drawing the score indicator
-  for (int i = 0; i < p1Score; i++) {
+  for (int i = 0; i < p1Points; i++) {
     grid[0][1+i] = 1;
   }
 
-  for (int i = 0; i < p2Score; i++) {
+  for (int i = 0; i < p2Points; i++) {
     grid[0][10-i] = 1;
   }
   matrix.renderBitmap(grid, matrixSizeY, matrixSizeX);
@@ -272,10 +310,10 @@ void resetGrid() {
 
 
 void checkIfGameOver() {
-  if (p1Score >= 4) {
+  if (p1Points >= pointsNeededToWin) {
     winner = 1;
     gameOver();
-  } else if (p2Score >= 4) {
+  } else if (p2Points >= pointsNeededToWin) {
     winner = 2;
     gameOver();
   }
