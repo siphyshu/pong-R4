@@ -7,7 +7,7 @@ const int matrixSizeX = 12;
 const int matrixSizeY = 8;
 const int paddleSize = 3;
 
-const int debugPin = D13;
+const int debugPin = D13; // Connect D13 with GND to enable debugging
 // the axis of the joystick is flipped, meaning that the original x-axis is y and the original y-axis is x
 // the reason: to align with the way it'll be most comfortable for the player to hold the joystick (wires going upwards, away from body)
 const int joystick1XPin = A1;  // Analog pin for X-axis of the joystick #1 (left)
@@ -26,11 +26,13 @@ bool sw1State, sw1Prev;
 bool sw2State, sw2Prev;
 int x1Value, y1Value, x1Map, y1Map, x1Prev, y1Prev;
 int x2Value, y2Value, x2Map, y2Map, x2Prev, y2Prev;
-int paddle1Direction, paddle2Direction, paddle1DirectionPrev, paddle2DirectionPrev;
-int paddleSpeed = 2;
-int ballSpeedX = 1, ballSpeedY = 1;
 String paddle1DirectionStr, paddle2DirectionStr;
-
+int paddle1Direction, paddle2Direction, paddle1DirectionPrev, paddle2DirectionPrev;
+int ballSpeed = 1;
+int paddleSpeed = 2;
+int ballSpeedX = ballSpeed, ballSpeedY = ballSpeed;
+int p1Score = 0, p2Score = 0; 
+int winner;
 
 byte grid[matrixSizeY][matrixSizeX] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
@@ -52,6 +54,9 @@ Point paddle1[paddleSize];
 Point paddle2[paddleSize];
 Point ball;
 
+// forward declarations
+void printText(String displayText, int scrollDirection, int speed);
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
@@ -71,21 +76,22 @@ void setup() {
   initializeGame();
 }
 
+
 void loop() {
+  debugState = not digitalRead(debugPin);
+  if (debugState) {
+    printDebugInfo();
+  }
+
   handleJoystick();
+
+  checkIfGameOver();
+
+  movePaddles();
+
+  moveBall(); 
   
-  if (isGameOver) {
-    resetGrid();
-  }
-  else {
-    movePaddles();
-
-    moveBall();
-
-    // checkCollisions();
-
-    updateMatrix();
-  }
+  updateMatrix();
 
   delay(100);
 }
@@ -113,47 +119,6 @@ void initializeGame() {
   }
 
   matrix.renderBitmap(grid, matrixSizeX, matrixSizeY);
-}
-
-
-void handleJoystick() {
-  x1Value = analogRead(joystick1XPin);
-  x2Value = analogRead(joystick2XPin);
-  y1Value = analogRead(joystick1YPin);
-  y2Value = analogRead(joystick2YPin);
-  sw1State = not digitalRead(joystick1SwPin);
-  sw2State = not digitalRead(joystick2SwPin);
-  debugState = not digitalRead(debugPin);
-
-  x1Map = map(x1Value, 0, 1023, 512, -512);
-  x2Map = map(x2Value, 0, 1023, 512, -512);
-  y1Map = map(y1Value, 0, 1023, 512, -512);
-  y2Map = map(y2Value, 0, 1023, 512, -512);
-
-  // if the game is running, only up and down are enabled, else all 4 directions are enabled
-  if (!isGameOver) {
-    if (y1Map <= 512 && y1Map >= joystickDeadzone) { paddle1Direction = 2, paddle1DirectionStr = "Up"; } // Up
-    else if (y1Map >= -512 && y1Map <= -joystickDeadzone) { paddle1Direction = 4, paddle1DirectionStr = "Down"; } // Down
-    else { paddle1Direction = 0, paddle1DirectionStr = "Idle"; }
-
-    if (y2Map <= 512 && y2Map >= joystickDeadzone) { paddle2Direction = 2, paddle2DirectionStr = "Up"; } // Up
-    else if (y2Map >= -512 && y2Map <= -joystickDeadzone) { paddle2Direction = 4, paddle2DirectionStr = "Down"; } // Down
-    else { paddle2Direction = 0, paddle2DirectionStr = "Idle"; }
-  } 
-  else {
-    if (x1Map <= 512 && x1Map >= joystickDeadzone && y1Map <= 511 && y1Map >= -511) { paddle1Direction = 1, paddle1DirectionStr = "Right"; } // Right 
-    else if (x1Map >= -512 && x1Map <= -joystickDeadzone && y1Map <= 511 && y1Map >= -511) { paddle1Direction = 3, paddle1DirectionStr = "Left";} // Left
-    else if (y1Map <= 512 && y1Map >= joystickDeadzone && x1Map <= 511 && x1Map >= -511) { paddle1Direction = 2, paddle1DirectionStr = "Up"; } // Up
-    else if (y1Map >= -512 && y1Map <= -joystickDeadzone && x1Map <= 511 && x1Map >= -511) { paddle1Direction = 4, paddle1DirectionStr = "Down"; } // Down
-    
-    if (x2Map <= 512 && x2Map >= joystickDeadzone && y2Map <= 511 && y2Map >= -511) { paddle2Direction = 1, paddle2DirectionStr = "Right"; } // Right 
-    else if (x2Map >= -512 && x2Map <= -joystickDeadzone && y2Map <= 511 && y2Map >= -511) { paddle2Direction = 3, paddle2DirectionStr = "Left";} // Left
-    else if (y2Map <= 512 && y2Map >= joystickDeadzone && x2Map <= 511 && x2Map >= -511) { paddle2Direction = 2, paddle2DirectionStr = "Up"; } // Up
-    else if (y2Map >= -512 && y2Map <= -joystickDeadzone && x2Map <= 511 && x2Map >= -511) { paddle2Direction = 4, paddle2DirectionStr = "Down"; } // Down
-  }
-
-  Serial.println("Joystick 1: " + paddle1DirectionStr + ", Joystick 2: " + paddle2DirectionStr);
-  Serial.println();
 }
 
 
@@ -206,38 +171,203 @@ void moveBall() {
   }
 
   // Check for scoring
-  if (ball.x < 0 || ball.x >= matrixSizeX) {
-    isGameOver = true;
+  if (ball.x < 0 ) {
+    p2Score += 1;
+    resetBall(2);
+  } else if (ball.x >= matrixSizeX) {
+    p1Score += 1;
+    resetBall(1);
+  }
+
+}
+
+
+void resetBall(int playerTurn) {
+  // playerTurn: the ball will move towards this player 
+  
+  if (playerTurn == 1) { 
+    ball.y = 2;
+    ball.x = 8;
+    ballSpeedY = -(ballSpeed);
+    ballSpeedX = -(ballSpeed);
+  } 
+  else if (playerTurn == 2) {
+    ball.y = 2;
+    ball.x = 3;
+    ballSpeedY = -(ballSpeed);
+    ballSpeedX = (ballSpeed);
   }
 }
 
 
-void print(boolean debugState) {
-  if (debugState) {
-    Serial.println("Joystick 1: (" + String(x1Map) + ", " + String(y1Map) + "), Button: " + String(sw1State));
-    Serial.println("Joystick 2: (" + String(x2Map) + ", " + String(y2Map) + "), Button: " + String(sw2State));
-    Serial.println();
-  }
+void printDebugInfo() {
+  // Connect D13 with GND to enable debugging
+  Serial.println("Joystick 1: (" + String(x1Map) + ", " + String(y1Map) + "), Button: " + String(sw1State));
+  Serial.println("Joystick 2: (" + String(x2Map) + ", " + String(y2Map) + "), Button: " + String(sw2State));
+  // Serial.println("WinnerStr = " + winnerString);
+  Serial.println();
 }
 
 
-void resetGrid() {
-  for (int y = 0; y < matrixSizeY; y++) {
-    for (int x = 0; x < matrixSizeX; x++) {
-      grid[y][x] = 0;
-    }
+void printText(String displayText, int scrollDirection = 0, int speed = 35) {
+  // speed: 30-50 is a readable speed
+
+  matrix.beginDraw();
+  matrix.stroke(0xFFFFFFFF);
+  matrix.textScrollSpeed(speed);
+  matrix.textFont(Font_5x7);
+  matrix.beginText(0, 1, 0xFFFFFF);
+  matrix.println(displayText);
+
+
+  // scrollDirection: 0 = NO SCROLL, 1 = RIGHT, 2 = LEFT
+  if (scrollDirection == 0) { 
+    matrix.endText();
+  } else if (scrollDirection == 1) {
+    matrix.endText(SCROLL_RIGHT);
+  } else if (scrollDirection == 2) {
+    matrix.endText(SCROLL_LEFT);
+  } else {
+    matrix.endText(); // fallback in case of error
   }
+
+  matrix.endDraw();
 }
 
 
 void updateMatrix() {
   resetGrid();
 
+  // drawing teh paddles
   for (int i = 0; i < paddleSize; i++) {
     grid[paddle1[i].y][paddle1[i].x] = 1;
     grid[paddle2[i].y][paddle2[i].x] = 1;
   }
 
+  // drawing the balls
   grid[ball.y][ball.x] = 1;
+
+  // drawing the score indicator
+  for (int i = 0; i < p1Score; i++) {
+    grid[0][1+i] = 1;
+  }
+
+  for (int i = 0; i < p2Score; i++) {
+    grid[0][10-i] = 1;
+  }
   matrix.renderBitmap(grid, matrixSizeY, matrixSizeX);
+}
+
+
+void resetGrid() {
+  // this is sort of a refresh for the screen
+  for (int y = 0; y < matrixSizeY; y++) {
+    for (int x = 0; x < matrixSizeX; x++) {
+      grid[y][x] = 0;
+    }
+  }
+
+  matrix.renderBitmap(grid, matrixSizeY, matrixSizeX);
+}
+
+
+void checkIfGameOver() {
+  if (p1Score >= 4) {
+    winner = 1;
+    gameOver();
+  } else if (p2Score >= 4) {
+    winner = 2;
+    gameOver();
+  }
+}
+
+
+void gameOver() {
+  isGameOver = true;
+  resetGrid();
+
+  for (int i=0; i<4; i++) {
+    displayWinner(false, winner);
+  }
+  
+  // resetGrid();
+  while (true) {
+    
+  }
+}
+
+
+void displayWinner(bool toBlink, int winner) {
+  uint8_t scoreboard[8][12] = {
+      { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+      { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+      { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+      { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+      { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+      { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+      { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+      { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+    };
+
+  if (winner == 1) {
+    scoreboard[1][1] = 1; scoreboard[1][2] = 1; scoreboard[1][3] = 1; scoreboard[1][9] = 1;
+    scoreboard[2][1] = 1; scoreboard[2][4] = 1; scoreboard[2][8] = 1; scoreboard[2][9] = 1;
+    scoreboard[3][1] = 1; scoreboard[3][4] = 1; scoreboard[3][7] = 1; scoreboard[3][9] = 1;
+    scoreboard[4][1] = 1; scoreboard[4][2] = 1; scoreboard[4][3] = 1; scoreboard[4][9] = 1;
+    scoreboard[5][1] = 1; scoreboard[5][9] = 1;  
+    scoreboard[6][1] = 1; scoreboard[6][7] = 1; scoreboard[6][8] = 1; scoreboard[6][9] = 1; scoreboard[6][10] = 1;
+
+  } else if (winner == 2) {
+    scoreboard[1][1] = 1; scoreboard[1][2] = 1; scoreboard[1][3] = 1; scoreboard[1][8] = 1; scoreboard[1][9] = 1;
+    scoreboard[2][1] = 1; scoreboard[2][4] = 1; scoreboard[2][7] = 1; scoreboard[2][10] = 1;
+    scoreboard[3][1] = 1; scoreboard[3][4] = 1; scoreboard[3][10] = 1;
+    scoreboard[4][1] = 1; scoreboard[4][2] = 1; scoreboard[4][3] = 1; scoreboard[4][9] = 1;
+    scoreboard[5][1] = 1; scoreboard[5][8] = 1;  
+    scoreboard[6][1] = 1; scoreboard[6][7] = 1; scoreboard[6][8] = 1; scoreboard[6][9] = 1; scoreboard[6][10] = 1;
+  }
+
+  resetGrid();
+  matrix.renderBitmap(scoreboard, 8, 12);
+  delay(500);
+  if (toBlink) {
+    matrix.renderBitmap(grid, 8, 12);
+    delay(500);
+  };
+} 
+
+
+void handleJoystick() {
+  x1Value = analogRead(joystick1XPin);
+  x2Value = analogRead(joystick2XPin);
+  y1Value = analogRead(joystick1YPin);
+  y2Value = analogRead(joystick2YPin);
+  sw1State = not digitalRead(joystick1SwPin);
+  sw2State = not digitalRead(joystick2SwPin);
+
+  x1Map = map(x1Value, 0, 1023, 512, -512);
+  x2Map = map(x2Value, 0, 1023, 512, -512);
+  y1Map = map(y1Value, 0, 1023, 512, -512);
+  y2Map = map(y2Value, 0, 1023, 512, -512);
+
+  // if the game is running, only up and down are enabled, else all 4 directions are enabled
+  if (!isGameOver) {
+    if (y1Map <= 512 && y1Map >= joystickDeadzone) { paddle1Direction = 2, paddle1DirectionStr = "Up"; } // Up
+    else if (y1Map >= -512 && y1Map <= -joystickDeadzone) { paddle1Direction = 4, paddle1DirectionStr = "Down"; } // Down
+    else { paddle1Direction = 0, paddle1DirectionStr = "Idle"; }
+
+    if (y2Map <= 512 && y2Map >= joystickDeadzone) { paddle2Direction = 2, paddle2DirectionStr = "Up"; } // Up
+    else if (y2Map >= -512 && y2Map <= -joystickDeadzone) { paddle2Direction = 4, paddle2DirectionStr = "Down"; } // Down
+    else { paddle2Direction = 0, paddle2DirectionStr = "Idle"; }
+  } 
+  else {
+    if (x1Map <= 512 && x1Map >= joystickDeadzone && y1Map <= 511 && y1Map >= -511) { paddle1Direction = 1, paddle1DirectionStr = "Right"; } // Right 
+    else if (x1Map >= -512 && x1Map <= -joystickDeadzone && y1Map <= 511 && y1Map >= -511) { paddle1Direction = 3, paddle1DirectionStr = "Left";} // Left
+    else if (y1Map <= 512 && y1Map >= joystickDeadzone && x1Map <= 511 && x1Map >= -511) { paddle1Direction = 2, paddle1DirectionStr = "Up"; } // Up
+    else if (y1Map >= -512 && y1Map <= -joystickDeadzone && x1Map <= 511 && x1Map >= -511) { paddle1Direction = 4, paddle1DirectionStr = "Down"; } // Down
+    
+    if (x2Map <= 512 && x2Map >= joystickDeadzone && y2Map <= 511 && y2Map >= -511) { paddle2Direction = 1, paddle2DirectionStr = "Right"; } // Right 
+    else if (x2Map >= -512 && x2Map <= -joystickDeadzone && y2Map <= 511 && y2Map >= -511) { paddle2Direction = 3, paddle2DirectionStr = "Left";} // Left
+    else if (y2Map <= 512 && y2Map >= joystickDeadzone && x2Map <= 511 && x2Map >= -511) { paddle2Direction = 2, paddle2DirectionStr = "Up"; } // Up
+    else if (y2Map >= -512 && y2Map <= -joystickDeadzone && x2Map <= 511 && x2Map >= -511) { paddle2Direction = 4, paddle2DirectionStr = "Down"; } // Down
+  }
 }
