@@ -232,8 +232,15 @@ void moveBall() {
   bool collidedWithTopOrBottomWall = ball.y <= 0 || ball.y >= matrixSizeY - 1;
   bool collidedWithLeftWall = ball.x < 0;
   bool collidedWithRightWall = ball.x >= matrixSizeX;
-  bool collidedWithLeftPaddle = ball.x == 1 && ball.y >= (paddle1[0].y) && ball.y < (paddle1[0].y + paddleSize);
-  bool collidedWithRightPaddle = ball.x == (matrixSizeX - 2) && ball.y >= (paddle2[0].y) && ball.y < (paddle2[0].y + paddleSize);
+
+  // This monstrous boolean statement sums up to the following english sentence:
+  // Is the ball is at the edge of the screen AND is it either touching the paddle OR about to touch the edge of the paddle in the next tick?
+  
+  // It checks if the ball about to touch the lower or upple edge of the paddle by seeing the direction of the ball
+  // Upper edge: It will touch the upper edge of the paddle in the next tick if the ball is moving downwards
+  // Lower edge: It will touch the lower edge of the paddle in the next tick if the ball is moving upwards
+  bool collidedWithLeftPaddle = (ball.x == 1) && ((ball.y >= paddle1[0].y) || (ball.y == paddle1[0].y-1 && ballSpeedY == ballSpeed)) && ((ball.y < (paddle1[0].y + paddleSize)) || (ball.y == (paddle1[0].y + paddleSize) && ballSpeedY == -ballSpeed));
+  bool collidedWithRightPaddle = (ball.x == (matrixSizeX - 2)) && ((ball.y >= paddle2[0].y) || (ball.y == paddle2[0].y-1 && ballSpeedY == ballSpeed)) && ((ball.y < (paddle2[0].y + paddleSize)) || (ball.y == (paddle2[0].y + paddleSize) && ballSpeedY == -ballSpeed));
 
   // NOTE: here the corner does not refer to the absolute corner of the screen, it is with taking the paddle into account
   bool isCorner = (ball.x == 1 && ball.y == 0) || (ball.x == 1 && ball.y == 7) || (ball.x == 10 && ball.y == 0) || (ball.x == 10 && ball.y == 7);
