@@ -16,7 +16,7 @@ const int joystick1SwPin = D12;  // Digital pin for Switch of the joystick #1 (l
 const int joystick2XPin = A3;  // Analog pin for X-axis of the joystick #2 (right)
 const int joystick2YPin = A2;  // Analog pin for Y-axis of the joystick #2 (right)
 const int joystick2SwPin = D11;  // Digital pin for Switch of the joystick #2 (right)
-const int joystickDeadzone = 50;  // Defines the deadzone area around the joystick's idle position to account for potentiometer inaccuracies.
+const int joystickDeadzone = 200;  // Defines the deadzone area around the joystick's idle position to account for potentiometer inaccuracies.
                                   // Increase this if there are unintentional direction changes in one or two specific directions.
                                   // Decrease this if joystick feels unresponsive or sluggish when changing directions.
 
@@ -30,11 +30,13 @@ String paddle1DirectionStr, paddle2DirectionStr;
 int paddle1Direction, paddle2Direction, paddle1DirectionPrev, paddle2DirectionPrev;
 int ballSpeed = 1;
 int paddleSpeed = 2;
+int gameTickSpeed = 100;
 int ballSpeedX = ballSpeed, ballSpeedY = ballSpeed;
 int p1Points = 0, p2Points = 0; 
 int pointsNeededToWin = 5;
 int randomVariable = 0; // just used to assign it to random() choices
 int winner;
+
 
 byte grid[matrixSizeY][matrixSizeX] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
@@ -83,10 +85,10 @@ void setup() {
 void loop() {
   debugState = not digitalRead(debugPin);
   if (debugState) {
-    pointsNeededToWin = 100;
+    gameTickSpeed = 250;
     printDebugInfo();
   } else {
-    
+    gameTickSpeed = 100;
   }
 
   handleJoystick();
@@ -99,7 +101,7 @@ void loop() {
   
   updateMatrix();
 
-  delay(100);
+  delay(gameTickSpeed);
 }
 
 
@@ -158,60 +160,125 @@ void movePaddle(Point paddle[], int direction) {
 }
 
 
+// void moveBall() {
+//   // Move the ball
+//   ball.x += ballSpeedX;
+//   ball.y += ballSpeedY;
+// 
+//   // Serial.println("ball: (" + String(ball.x) + ", " + String(ball.y) + ")");
+//   // Serial.println("[1] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
+// 
+//   bool collidedWithTopOrBottomWall = ball.y <= 0 || ball.y >= matrixSizeY - 1;
+//   bool collidedWithRightWall = ball.x < 0;
+//   bool collidedWithLeftWall = ball.x >= matrixSizeX;
+//   bool collidedWithLeftPaddle = ball.x == 1 && ball.y >= paddle1[0].y && ball.y <= (paddle1[0].y + paddleSize);
+//   bool collidedWithRightPaddle = ball.x == (matrixSizeX - 2) && ball.y >= paddle2[0].y && ball.y <= (paddle2[0].y + paddleSize);
+// 
+//   // NOTE: here the corner does not refer to the absolute corner of the screen, it is with taking the paddle into account
+//   bool isCorner = (ball.x == 1 && ball.y == 0) || (ball.x == 1 && ball.y == 7) || (ball.x == 10 && ball.y == 0) || (ball.x == 10 && ball.y == 7);
+// 
+// 
+//   if (collidedWithTopOrBottomWall) {
+//     ballSpeedY = -ballSpeedY;
+//     // Serial.println("[2] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
+//   }
+// 
+//   
+//   // we have to specially check this corner edge case only because of 
+//   // some segmentation fault type error occuring when the ball touched a corner
+//   if (isCorner) {
+//     // if it hits the corner, there can be two conditions:
+//     // 1. if there is a paddle in the way, it will bounce back
+//     // 2. if there is no paddle in the way, the player on the opposite side will score
+//     
+// 
+//   }
+//   else if (collidedWithLeftPaddle || collidedWithRightPaddle) {
+//     ballSpeedX = -ballSpeedX;
+//     randomVariable = random(1,101);
+// 
+//     if (randomVariable >= 1 && randomVariable <= 40) {
+//       ballSpeedY = -ballSpeed;
+//     } else if (randomVariable >= 41 && randomVariable <= 80) {
+//       ballSpeedY = ballSpeed;
+//     } else if (randomVariable >= 81 && randomVariable <= 100) {
+//       ballSpeedY = 0;
+//     }
+//     // Serial.println("[3] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
+//   }
+// 
+//   if (collidedWithRightWall && !collidedWithRightPaddle) {
+//     // Player 2 will score here
+//     p2Points += 1;
+//     delay(75);
+//     resetBall(2);
+//   } else if (collidedWithLeftWall && !collidedWithLeftPaddle) {
+//     // Player 1 will score here
+//     p1Points += 1;
+//     delay(75);
+//     resetBall(1);
+//   };
+// 
+//   // Serial.println("[4] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
+//   // Serial.println("---");
+// }
+
+
 void moveBall() {
   // Move the ball
   ball.x += ballSpeedX;
   ball.y += ballSpeedY;
 
-  // Serial.println("ball: (" + String(ball.x) + ", " + String(ball.y) + ")");
-  // Serial.println("[1] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
-
   bool collidedWithTopOrBottomWall = ball.y <= 0 || ball.y >= matrixSizeY - 1;
-  bool collidedWithRightWall = ball.x < 0;
-  bool collidedWithLeftWall = ball.x >= matrixSizeX;
-  bool collidedWithLeftPaddle = ball.x == 1 && ball.y >= paddle1[0].y && ball.y <= paddle1[0].y + paddleSize;
-  bool collidedWithRightPaddle = ball.x == matrixSizeX - 2 && ball.y >= paddle2[0].y && ball.y <= paddle2[0].y + paddleSize;
+  bool collidedWithLeftWall = ball.x < 0;
+  bool collidedWithRightWall = ball.x >= matrixSizeX;
+  bool collidedWithLeftPaddle = ball.x == 1 && ball.y >= (paddle1[0].y) && ball.y < (paddle1[0].y + paddleSize);
+  bool collidedWithRightPaddle = ball.x == (matrixSizeX - 2) && ball.y >= (paddle2[0].y) && ball.y < (paddle2[0].y + paddleSize);
 
-  // if (ball.x == paddle1[0])
-
-  // Check for collisions with the top or bottom walls; in such case, the ball will bounce
-  if (collidedWithTopOrBottomWall) {
-    ballSpeedY = -ballSpeedY;
-    // Serial.println("[2] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
-  }
-
+  // NOTE: here the corner does not refer to the absolute corner of the screen, it is with taking the paddle into account
   bool isCorner = (ball.x == 1 && ball.y == 0) || (ball.x == 1 && ball.y == 7) || (ball.x == 10 && ball.y == 0) || (ball.x == 10 && ball.y == 7);
-  if (isCorner) {
-      // we do nothing. do NOT change this code. let this be here else bad things happen. idk why.
-    }
-  else if (collidedWithLeftPaddle || collidedWithRightPaddle) {
-    ballSpeedX = -ballSpeedX;
-    randomVariable = random(1,101);
 
-    if (randomVariable >= 1 && randomVariable <= 40) {
-      ballSpeedY = -ballSpeed;
-    } else if (randomVariable >= 41 && randomVariable <= 80) {
-      ballSpeedY = ballSpeed;
-    } else if (randomVariable >= 81 && randomVariable <= 100) {
-      ballSpeedY = 0;
+  if (isCorner) {
+    // check if the paddle is there
+    // if it's there then simply bounce the ball
+    // if it's not there, then do nothing
+    if (collidedWithTopOrBottomWall) {
+      ballSpeedY = -ballSpeedY;
     }
-    // Serial.println("[3] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
+    if (collidedWithLeftPaddle || collidedWithRightPaddle) {
+      ballSpeedX = -ballSpeedX;
+    }
+  }
+  else {
+    if (collidedWithTopOrBottomWall) {
+      ballSpeedY = -ballSpeedY;
+    }
+    else if (collidedWithLeftPaddle || collidedWithRightPaddle) {
+      ballSpeedX = -ballSpeedX;
+      randomVariable = random(1,101);
+
+      if (randomVariable >= 1 && randomVariable <= 40) {
+        ballSpeedY = -ballSpeed;
+      } else if (randomVariable >= 41 && randomVariable <= 80) {
+        ballSpeedY = ballSpeed;
+      } else if (randomVariable >= 81 && randomVariable <= 100) {
+        ballSpeedY = 0;
+      }
+    }
+    else if (collidedWithLeftWall) {
+      // Player 2 will score here
+      p2Points += 1;
+      delay(75);
+      resetBall(2);
+    } 
+    else if (collidedWithRightWall) {
+      // Player 1 will score here
+      p1Points += 1;
+      delay(75);
+      resetBall(1);
+    }
   }
 
-  if (collidedWithRightWall) {
-    // Player 2 will score here
-    p2Points += 1;
-    delay(75);
-    resetBall(2);
-  } else if (collidedWithLeftWall) {
-    // Player 1 will score here
-    p1Points += 1;
-    delay(75);
-    resetBall(1);
-  };
-
-  // Serial.println("[4] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
-  // Serial.println("---");
 }
 
 
