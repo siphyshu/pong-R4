@@ -189,7 +189,7 @@ void initializeGame() {
     grid[paddle2[i].y][paddle2[i].x] = 1;
   }
 
-  matrix.renderBitmap(grid, matrixSizeX, matrixSizeY);
+  matrix.renderBitmap(grid, matrixSizeY, matrixSizeX);
 }
 
 
