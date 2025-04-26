@@ -1,6 +1,8 @@
 #include "ArduinoGraphics.h"
 #include "Arduino_LED_Matrix.h"
 
+#include "intro.h"
+
 ArduinoLEDMatrix matrix;  
 
 const int matrixSizeX = 12;
@@ -77,6 +79,51 @@ void setup() {
   pinMode(joystick1SwPin, INPUT_PULLUP);
   pinMode(joystick2SwPin, INPUT_PULLUP);
   pinMode(debugPin, INPUT_PULLUP);
+
+  // We are basically checking if the joystick is moved during the intro sequence to skip it
+  
+  // Why not just check if the joystick is moved at all?
+  // Because the joystick might not be stable at the beginning of the sequence, so we need to wait for it to stabilize
+  // Or, if the joystick is not connected to power, it will read some random values ~500, so we can't use that
+  // So, we are checking if the joystick is moved significantly from its initial reading
+
+  // Get initial joystick readings as reference points
+  delay(100); // Give joysticks time to stabilize
+  int x1Init = analogRead(joystick1XPin);
+  int y1Init = analogRead(joystick1YPin);
+  int x2Init = analogRead(joystick2XPin);
+  int y2Init = analogRead(joystick2YPin);
+
+  matrix.loadSequence(intro);
+  matrix.play();
+  
+  // Skip animation if joystick is moved
+  bool skipIntro = false;
+  int consecutiveMovements = 0;  // Track consecutive detected movements
+  while (!matrix.sequenceDone() && !skipIntro) {
+    // Check if any joystick is moved significantly
+    int x1 = analogRead(joystick1XPin);
+    int y1 = analogRead(joystick1YPin);
+    int x2 = analogRead(joystick2XPin);
+    int y2 = analogRead(joystick2YPin);
+    
+    // Check if there's significant movement compared to initial values
+    if (abs(x1 - x1Init) > 200 || abs(y1 - y1Init) > 200 ||
+        abs(x2 - x2Init) > 200 || abs(y2 - y2Init) > 200) {
+      consecutiveMovements++;
+      if (consecutiveMovements >= 3) {  // Require 3 consecutive readings to confirm movement
+        skipIntro = true;
+      }
+    } else {
+      consecutiveMovements = 0;  // Reset counter if no movement detected
+    }
+    
+    delay(10);
+  }
+  delay(200);
+
+  // const String pongASCII = "    PONG-R4    ";
+  // printText(pongASCII, 2, 35);
 
   initializeGame();
 }
@@ -158,70 +205,6 @@ void movePaddle(Point paddle[], int direction) {
     paddle[i].y = paddle[i-1].y+1;
   }
 }
-
-
-// void moveBall() {
-//   // Move the ball
-//   ball.x += ballSpeedX;
-//   ball.y += ballSpeedY;
-// 
-//   // Serial.println("ball: (" + String(ball.x) + ", " + String(ball.y) + ")");
-//   // Serial.println("[1] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
-// 
-//   bool collidedWithTopOrBottomWall = ball.y <= 0 || ball.y >= matrixSizeY - 1;
-//   bool collidedWithRightWall = ball.x < 0;
-//   bool collidedWithLeftWall = ball.x >= matrixSizeX;
-//   bool collidedWithLeftPaddle = ball.x == 1 && ball.y >= paddle1[0].y && ball.y <= (paddle1[0].y + paddleSize);
-//   bool collidedWithRightPaddle = ball.x == (matrixSizeX - 2) && ball.y >= paddle2[0].y && ball.y <= (paddle2[0].y + paddleSize);
-// 
-//   // NOTE: here the corner does not refer to the absolute corner of the screen, it is with taking the paddle into account
-//   bool isCorner = (ball.x == 1 && ball.y == 0) || (ball.x == 1 && ball.y == 7) || (ball.x == 10 && ball.y == 0) || (ball.x == 10 && ball.y == 7);
-// 
-// 
-//   if (collidedWithTopOrBottomWall) {
-//     ballSpeedY = -ballSpeedY;
-//     // Serial.println("[2] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
-//   }
-// 
-//   
-//   // we have to specially check this corner edge case only because of 
-//   // some segmentation fault type error occuring when the ball touched a corner
-//   if (isCorner) {
-//     // if it hits the corner, there can be two conditions:
-//     // 1. if there is a paddle in the way, it will bounce back
-//     // 2. if there is no paddle in the way, the player on the opposite side will score
-//     
-// 
-//   }
-//   else if (collidedWithLeftPaddle || collidedWithRightPaddle) {
-//     ballSpeedX = -ballSpeedX;
-//     randomVariable = random(1,101);
-// 
-//     if (randomVariable >= 1 && randomVariable <= 40) {
-//       ballSpeedY = -ballSpeed;
-//     } else if (randomVariable >= 41 && randomVariable <= 80) {
-//       ballSpeedY = ballSpeed;
-//     } else if (randomVariable >= 81 && randomVariable <= 100) {
-//       ballSpeedY = 0;
-//     }
-//     // Serial.println("[3] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
-//   }
-// 
-//   if (collidedWithRightWall && !collidedWithRightPaddle) {
-//     // Player 2 will score here
-//     p2Points += 1;
-//     delay(75);
-//     resetBall(2);
-//   } else if (collidedWithLeftWall && !collidedWithLeftPaddle) {
-//     // Player 1 will score here
-//     p1Points += 1;
-//     delay(75);
-//     resetBall(1);
-//   };
-// 
-//   // Serial.println("[4] ballSpeedX: " + String(ballSpeedX) + ", ballSpeedY: " + String(ballSpeedY));
-//   // Serial.println("---");
-// }
 
 
 void moveBall() {
@@ -451,7 +434,7 @@ void displayWinner(bool toBlink, int winner) {
 void handleJoystick() {
   x1Value = analogRead(joystick1XPin);
   x2Value = analogRead(joystick2XPin);
-  y1Value = analogRead(joystick1YPin);
+  y1Value = analogRead(joystick1YPin);  
   y2Value = analogRead(joystick2YPin);
   sw1State = not digitalRead(joystick1SwPin);
   sw2State = not digitalRead(joystick2SwPin);
