@@ -5,6 +5,9 @@
 #include "continue_playing.h"
 #include "yes_option.h"
 #include "no_option.h"
+#include "player_selection.h"
+#include "1p_option.h"
+#include "2p_option.h"
 
 ArduinoLEDMatrix matrix;  
 
@@ -27,6 +30,7 @@ const int joystickDeadzone = 200;  // Defines the deadzone area around the joyst
 
 bool debugState = false;
 bool isGameOver = false;
+bool singlePlayerMode = false;
 bool sw1State, sw1Prev;
 bool sw2State, sw2Prev;
 int x1Value, y1Value, x1Map, y1Map, x1Prev, y1Prev;
@@ -41,6 +45,7 @@ int p1Points = 0, p2Points = 0;
 int pointsNeededToWin = 5;
 int randomVariable = 0; // just used to assign it to random() choices
 int winner;
+int aiPredictionError = 1; // How much error to add to AI prediction
 
 
 byte grid[matrixSizeY][matrixSizeX] = {
@@ -71,7 +76,7 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
 
-  Serial.println("🏓🕹️ 2-player pong game in Arduino R4 LED matrix");
+  Serial.println("🏓🕹️ Pong game in Arduino R4 LED matrix");
   matrix.begin();
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -125,8 +130,7 @@ void setup() {
   }
   delay(200);
 
-  // const String pongASCII = "    PONG-R4    ";
-  // printText(pongASCII, 2, 35);
+  selectGameMode();
 
   initializeGame();
 }
@@ -145,7 +149,13 @@ void loop() {
 
   checkIfGameOver();
 
-  movePaddles();
+  // Handle paddle movement based on game mode
+  if (singlePlayerMode) {
+    movePaddle1(); // paddle 1
+    moveAIPaddle(); // paddle 2
+  } else {
+    movePaddles();
+  }
 
   moveBall(); 
   
@@ -399,16 +409,17 @@ void continuePlaying() {
   matrix.renderFrame(0); // Default to "Yes" option
   String selectedOption = "yes";
   
-  // Reset button states for clean detection
   sw1State = false;
   sw2State = false;
   
-  // Variables to track hold duration
+  // These track the hold duration for the buttons
   unsigned long holdStartTime1 = 0;
   unsigned long holdStartTime2 = 0;
   bool isHolding1 = false;
   bool isHolding2 = false;
-  const unsigned long HOLD_DURATION = 2000; // 2 seconds to confirm
+  const unsigned long HOLD_DURATION = 1500; // 1.5 seconds to confirm
+  
+  // Note: isGameOver is already true here, so we don't need to modify it
   
   while (true) {
     handleJoystick();
@@ -418,13 +429,11 @@ void continuePlaying() {
     if (paddle1Direction == 3 || paddle2Direction == 3) {
       matrix.renderFrame(0);
       selectedOption = "yes";
-      // Reset holding when changing options
       isHolding1 = false;
       isHolding2 = false;
     } else if (paddle1Direction == 1 || paddle2Direction == 1) {
       matrix.renderFrame(1);
       selectedOption = "no";
-      // Reset holding when changing options
       isHolding1 = false;
       isHolding2 = false;
     }
@@ -435,7 +444,6 @@ void continuePlaying() {
         isHolding1 = true;
         holdStartTime1 = currentTime;
       } else {
-        // Calculate hold duration
         unsigned long holdDuration = currentTime - holdStartTime1;
         
         // If held long enough, confirm selection
@@ -453,7 +461,6 @@ void continuePlaying() {
         isHolding2 = true;
         holdStartTime2 = currentTime;
       } else {
-        // Calculate hold duration
         unsigned long holdDuration = currentTime - holdStartTime2;
         
         // If held long enough, confirm selection
@@ -465,15 +472,14 @@ void continuePlaying() {
       isHolding2 = false;
     }
     
-    // Press any button to select (keep this for compatibility)
+    // Press any button to select
     if (sw1State || sw2State) {
       break;
     }
     
-    delay(50); // Faster refresh for more responsive feedback
+    delay(50);
   }
 
-  // Show brief confirmation
   resetGrid();
   delay(300);
   
@@ -499,7 +505,6 @@ void continuePlaying() {
     p1Points = 0;
     p2Points = 0;
     
-    // Start a new game
     initializeGame();
   }
 }
@@ -578,4 +583,157 @@ void handleJoystick() {
     else if (y2Map <= 512 && y2Map >= joystickDeadzone && x2Map <= 511 && x2Map >= -511) { paddle2Direction = 2, paddle2DirectionStr = "Up"; } // Up
     else if (y2Map >= -512 && y2Map <= -joystickDeadzone && x2Map <= 511 && x2Map >= -511) { paddle2Direction = 4, paddle2DirectionStr = "Down"; } // Down
   }
+}
+
+// Add this function to select game mode
+void selectGameMode() {
+  matrix.loadSequence(player_selection);
+  matrix.renderFrame(0); // Default to "1P" option
+  singlePlayerMode = true; // Default to 1P mode
+  
+  sw1State = false;
+  sw2State = false;
+  
+  // These track the hold duration for the buttons
+  unsigned long holdStartTime1 = 0;
+  unsigned long holdStartTime2 = 0;
+  bool isHolding1 = false;
+  bool isHolding2 = false;
+  const unsigned long HOLD_DURATION = 1500; // 1.5 seconds to confirm
+  
+  // Temporarily set isGameOver to true to enable left/right in handleJoystick
+  bool originalGameOverState = isGameOver;
+  isGameOver = true;
+  
+  while (true) {
+    handleJoystick();
+    unsigned long currentTime = millis();
+    
+    // Use left/right to navigate options
+    if (paddle1Direction == 3 || paddle2Direction == 3) {
+      matrix.renderFrame(0);
+      singlePlayerMode = true;
+      isHolding1 = false;
+      isHolding2 = false;
+    } else if (paddle1Direction == 1 || paddle2Direction == 1) {
+      matrix.renderFrame(1);
+      singlePlayerMode = false;
+      isHolding1 = false;
+      isHolding2 = false;
+    }
+    
+    // Detect and track downward hold for player 1
+    if (paddle1Direction == 4) {
+      if (!isHolding1) {
+        isHolding1 = true;
+        holdStartTime1 = currentTime;
+      } else {
+        unsigned long holdDuration = currentTime - holdStartTime1;
+        
+        // If held long enough, confirm selection
+        if (holdDuration >= HOLD_DURATION) {
+          break; // Selection confirmed
+        }
+      }
+    } else {
+      isHolding1 = false;
+    }
+    
+    // Detect and track downward hold for player 2
+    if (paddle2Direction == 4) {
+      if (!isHolding2) {
+        isHolding2 = true;
+        holdStartTime2 = currentTime;
+      } else {
+        unsigned long holdDuration = currentTime - holdStartTime2;
+        
+        // If held long enough, confirm selection
+        if (holdDuration >= HOLD_DURATION) {
+          break; // Selection confirmed
+        }
+      }
+    } else {
+      isHolding2 = false;
+    }
+    
+    // Press any button to select
+    if (sw1State || sw2State) {
+      break;
+    }
+    
+    delay(50);
+  }
+  
+  // Restore original isGameOver state
+  isGameOver = originalGameOverState;
+
+  // Show selection animation
+  if (singlePlayerMode) {
+    matrix.loadSequence(option_1p);
+    matrix.play();
+    Serial.println("Selected 1-Player mode");
+  } else {
+    matrix.loadSequence(option_2p);
+    matrix.play();
+    Serial.println("Selected 2-Player mode");
+  }
+  
+  delay(1000);
+}
+
+// Handle player 1 paddle movement (for single player mode)
+void movePaddle1() {
+  if (paddle1Direction == 2) {
+    movePaddle(paddle1, 1);  // Move up
+  } else if (paddle1Direction == 4) {
+    movePaddle(paddle1, -1);  // Move down
+  } else if (paddle1Direction == 0) {
+    movePaddle(paddle1, 0); // Don't move
+  }
+}
+
+
+void moveAIPaddle() {
+  // Predict where ball will be when it reaches the AI paddle
+  int predictedY = predictBallPosition();
+  
+  // Add some randomness/error
+  predictedY += random(-aiPredictionError, aiPredictionError + 1);
+  
+  // Middle of paddle should go to predicted position
+  int targetY = constrain(predictedY - 1, 0, matrixSizeY - paddleSize);
+  
+  // Move paddle toward target
+  if (paddle2[1].y < targetY) {
+    movePaddle(paddle2, -1); // Move down
+  } else if (paddle2[1].y > targetY) {
+    movePaddle(paddle2, 1); // Move up
+  }
+}
+
+
+int predictBallPosition() {
+  // Only predict if ball is moving toward AI
+  if (ballSpeedX <= 0) {
+    // If moving away, just track ball's current position
+    return ball.y;
+  }
+  
+  // Calculate how many steps until ball reaches paddle
+  int steps = (matrixSizeX - 2 - ball.x) / ballSpeedX;
+  
+  // Predict final y position
+  int finalY = ball.y + (ballSpeedY * steps);
+  
+  // Handle bounces off top and bottom walls
+  while (finalY < 0 || finalY >= matrixSizeY) {
+    if (finalY < 0) {
+      finalY = -finalY; // Bounce off top
+    }
+    if (finalY >= matrixSizeY) {
+      finalY = (matrixSizeY - 1) - (finalY - (matrixSizeY - 1)); // Bounce off bottom
+    }
+  }
+  
+  return finalY;
 }
