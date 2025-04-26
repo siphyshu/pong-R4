@@ -2,6 +2,9 @@
 #include "Arduino_LED_Matrix.h"
 
 #include "intro.h"
+#include "continue_playing.h"
+#include "yes_option.h"
+#include "no_option.h"
 
 ArduinoLEDMatrix matrix;  
 
@@ -381,13 +384,69 @@ void gameOver() {
   isGameOver = true;
   resetGrid();
 
+  // Display the winner screen and blink it 4 times
   for (int i=0; i<4; i++) {
-    displayWinner(false, winner);
+    displayWinner(true, winner);
   }
   
-  // resetGrid();
+  // Show the continue playing screen
+  continuePlaying();
+}
+
+
+void continuePlaying() {
+  matrix.loadSequence(continue_playing);
+  matrix.renderFrame(0); // Default to "Yes" option
+  String selectedOption = "yes";
+  
+  // Reset button states for clean detection
+  sw1State = false;
+  sw2State = false;
+  
   while (true) {
+    handleJoystick();
     
+    // Use left/right to navigate options
+    if (paddle1Direction == 3 || paddle2Direction == 3) {
+      matrix.renderFrame(0);
+      selectedOption = "yes";
+    } else if (paddle1Direction == 1 || paddle2Direction == 1) {
+      matrix.renderFrame(1);
+      selectedOption = "no";
+    }
+    
+    // Press any button to select
+    if (sw1State || sw2State) {
+      break;
+    }
+    
+    delay(100);
+  }
+
+  // Process selected option
+  if (selectedOption == "no") {
+    matrix.loadSequence(no_option);
+    matrix.play();
+    delay(1500);
+    printText("    thx for playing!        made by siphyshu <3    ", 2, 35);
+    
+    // Show final score and winner indefinitely
+    while (true) {
+      displayWinner(false, winner);
+      delay(1000);
+    }
+  } else if (selectedOption == "yes") {
+    matrix.loadSequence(yes_option);
+    matrix.play();
+    delay(1500);
+    
+    // Reset game state
+    isGameOver = false;
+    p1Points = 0;
+    p2Points = 0;
+    
+    // Start a new game
+    initializeGame();
   }
 }
 
