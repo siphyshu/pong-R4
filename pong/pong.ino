@@ -403,26 +403,80 @@ void continuePlaying() {
   sw1State = false;
   sw2State = false;
   
+  // Variables to track hold duration
+  unsigned long holdStartTime1 = 0;
+  unsigned long holdStartTime2 = 0;
+  bool isHolding1 = false;
+  bool isHolding2 = false;
+  const unsigned long HOLD_DURATION = 2000; // 2 seconds to confirm
+  
   while (true) {
     handleJoystick();
+    unsigned long currentTime = millis();
     
     // Use left/right to navigate options
     if (paddle1Direction == 3 || paddle2Direction == 3) {
       matrix.renderFrame(0);
       selectedOption = "yes";
+      // Reset holding when changing options
+      isHolding1 = false;
+      isHolding2 = false;
     } else if (paddle1Direction == 1 || paddle2Direction == 1) {
       matrix.renderFrame(1);
       selectedOption = "no";
+      // Reset holding when changing options
+      isHolding1 = false;
+      isHolding2 = false;
     }
     
-    // Press any button to select
+    // Detect and track downward hold for player 1
+    if (paddle1Direction == 4) {
+      if (!isHolding1) {
+        isHolding1 = true;
+        holdStartTime1 = currentTime;
+      } else {
+        // Calculate hold duration
+        unsigned long holdDuration = currentTime - holdStartTime1;
+        
+        // If held long enough, confirm selection
+        if (holdDuration >= HOLD_DURATION) {
+          break; // Selection confirmed
+        }
+      }
+    } else {
+      isHolding1 = false;
+    }
+    
+    // Detect and track downward hold for player 2
+    if (paddle2Direction == 4) {
+      if (!isHolding2) {
+        isHolding2 = true;
+        holdStartTime2 = currentTime;
+      } else {
+        // Calculate hold duration
+        unsigned long holdDuration = currentTime - holdStartTime2;
+        
+        // If held long enough, confirm selection
+        if (holdDuration >= HOLD_DURATION) {
+          break; // Selection confirmed
+        }
+      }
+    } else {
+      isHolding2 = false;
+    }
+    
+    // Press any button to select (keep this for compatibility)
     if (sw1State || sw2State) {
       break;
     }
     
-    delay(100);
+    delay(50); // Faster refresh for more responsive feedback
   }
 
+  // Show brief confirmation
+  resetGrid();
+  delay(300);
+  
   // Process selected option
   if (selectedOption == "no") {
     matrix.loadSequence(no_option);
