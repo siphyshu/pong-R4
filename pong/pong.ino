@@ -45,7 +45,10 @@ int p1Points = 0, p2Points = 0;
 int pointsNeededToWin = 5;
 int randomVariable = 0; // just used to assign it to random() choices
 int winner;
-int aiPredictionError = 1; // How much error to add to AI prediction
+int aiPredictionError = 3; // How much error to add to AI prediction
+int aiLastPredictedY = 0;  // Store last predicted position for smoothing
+int aiMoveCounter = 0;     // Counter to control movement frequency
+const int AI_SMOOTHNESS = 3; // Higher = smoother but less responsive (3-5 is good)
 
 
 byte grid[matrixSizeY][matrixSizeX] = {
@@ -694,11 +697,22 @@ void movePaddle1() {
 
 
 void moveAIPaddle() {
+  // Only move every few frames to reduce jitter
+  aiMoveCounter++;
+  if (aiMoveCounter < AI_SMOOTHNESS) {
+    return;  // Skip movement this frame
+  }
+  aiMoveCounter = 0;
+  
   // Predict where ball will be when it reaches the AI paddle
   int predictedY = predictBallPosition();
   
   // Add some randomness/error
   predictedY += random(-aiPredictionError, aiPredictionError + 1);
+  
+  // Smooth the prediction by averaging with previous prediction (dampening)
+  predictedY = (predictedY + aiLastPredictedY) / 2;
+  aiLastPredictedY = predictedY;
   
   // Check if we need to handle the bottom corner case
   if (predictedY >= matrixSizeY - 1) {
@@ -715,11 +729,14 @@ void moveAIPaddle() {
     // Regular case - middle of paddle should try to align with predicted position
     int targetY = constrain(predictedY - (paddleSize / 2), 0, matrixSizeY - paddleSize);
     
-    // Move paddle toward target
-    if (paddle2[0].y < targetY) {
-      movePaddle(paddle2, -1); // Move down
-    } else if (paddle2[0].y > targetY) {
-      movePaddle(paddle2, 1); // Move up
+    // Only move if we're at least 2 positions away from target (reduces small jitters)
+    if (abs(paddle2[0].y - targetY) > 1) {
+      // Move paddle toward target
+      if (paddle2[0].y < targetY) {
+        movePaddle(paddle2, -1); // Move down
+      } else if (paddle2[0].y > targetY) {
+        movePaddle(paddle2, 1); // Move up
+      }
     }
   }
 }
