@@ -700,14 +700,27 @@ void moveAIPaddle() {
   // Add some randomness/error
   predictedY += random(-aiPredictionError, aiPredictionError + 1);
   
-  // Middle of paddle should go to predicted position
-  int targetY = constrain(predictedY - 1, 0, matrixSizeY - paddleSize);
-  
-  // Move paddle toward target
-  if (paddle2[1].y < targetY) {
-    movePaddle(paddle2, -1); // Move down
-  } else if (paddle2[1].y > targetY) {
-    movePaddle(paddle2, 1); // Move up
+  // Check if we need to handle the bottom corner case
+  if (predictedY >= matrixSizeY - 1) {
+    // Make sure we can reach the bottom
+    int targetY = matrixSizeY - paddleSize;
+    movePaddle(paddle2, -1); // Force move down to reach bottom
+  } 
+  // Check if we need to handle the top corner case
+  else if (predictedY <= 0) {
+    int targetY = 0;
+    movePaddle(paddle2, 1); // Force move up to reach top
+  }
+  else {
+    // Regular case - middle of paddle should try to align with predicted position
+    int targetY = constrain(predictedY - (paddleSize / 2), 0, matrixSizeY - paddleSize);
+    
+    // Move paddle toward target
+    if (paddle2[0].y < targetY) {
+      movePaddle(paddle2, -1); // Move down
+    } else if (paddle2[0].y > targetY) {
+      movePaddle(paddle2, 1); // Move up
+    }
   }
 }
 
